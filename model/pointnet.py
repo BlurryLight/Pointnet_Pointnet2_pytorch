@@ -1,10 +1,11 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.utils.data
 from torch.autograd import Variable
-import numpy as np
-import torch.nn.functional as F
 
 
 class STN3d(nn.Module):
@@ -86,6 +87,7 @@ class STNkd(nn.Module):
 
 
 class PointNetEncoder(nn.Module):
+    ##提取特征
     def __init__(self, global_feat=True, feature_transform=False, semseg = False):
         super(PointNetEncoder, self).__init__()
         self.stn = STN3d() if not semseg else STNkd(k=9)
@@ -101,6 +103,7 @@ class PointNetEncoder(nn.Module):
             self.fstn = STNkd(k=64)
 
     def forward(self, x):
+        #x=(32,3,2500)
         n_pts = x.size()[2]
         trans = self.stn(x)
         x = x.transpose(2, 1)
@@ -151,10 +154,13 @@ class PointNetCls(nn.Module):
 
 class PointNetDenseCls(nn.Module):
     def __init__(self, cat_num=16,part_num=50):
+        #这个有点魔改了吧？
+        #既要预测是哪一类的，也要预测part num 
         super(PointNetDenseCls, self).__init__()
         self.cat_num = cat_num
         self.part_num = part_num
         self.stn = STN3d()
+
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 128, 1)
@@ -174,7 +180,8 @@ class PointNetDenseCls(nn.Module):
         self.bnc1 = nn.BatchNorm1d(256)
         self.bnc2 = nn.BatchNorm1d(256)
         # segmentation network
-        self.convs1 = torch.nn.Conv1d(4944, 256, 1)
+
+        self.convs1 = torch.nn.Conv1d(4928 + cat_num, 256, 1)
         self.convs2 = torch.nn.Conv1d(256, 256, 1)
         self.convs3 = torch.nn.Conv1d(256, 128, 1)
         self.convs4 = torch.nn.Conv1d(128, part_num, 1)
@@ -183,6 +190,7 @@ class PointNetDenseCls(nn.Module):
         self.bns3 = nn.BatchNorm1d(128)
 
     def forward(self, point_cloud,label):
+        #(8,3,2500)
         batchsize,_ , n_pts = point_cloud.size()
         # point_cloud_transformed
         trans = self.stn(point_cloud)
@@ -190,34 +198,51 @@ class PointNetDenseCls(nn.Module):
         point_cloud_transformed = torch.bmm(point_cloud, trans)
         point_cloud_transformed = point_cloud_transformed.transpose(2, 1)
         # MLP
-        out1 = F.relu(self.bn1(self.conv1(point_cloud_transformed)))
-        out2 = F.relu(self.bn2(self.conv2(out1)))
-        out3 = F.relu(self.bn3(self.conv3(out2)))
+        out1 = F.relu(self.bn1(self.conv1(point_cloud_transformed))) #3->64
+        out2 = F.relu(self.bn2(self.conv2(out1))) # 64->128
+        out3 = F.relu(self.bn3(self.conv3(out2))) # 128->128
         # net_transformed
         trans_feat = self.fstn(out3)
         x = out3.transpose(2, 1)
         net_transformed = torch.bmm(x, trans_feat)
         net_transformed = net_transformed.transpose(2, 1)
         # MLP
-        out4 = F.relu(self.bn4(self.conv4(net_transformed)))
-        out5 = self.bn5(self.conv5(out4))
-        out_max = torch.max(out5, 2, keepdim=True)[0]
-        out_max = out_max.view(-1, 2048)
+        out4 = F.relu(self.bn4(self.conv4(net_transformed))) #128->512
+        out5 = self.bn5(self.conv5(out4)) # 512->2048
+        out_max = torch.max(out5, 2, keepdim=True)[0] # pooling 
+        out_max = out_max.view(-1, 2048) # (batch_size , 2048)
         # classification network
-        net = F.relu(self.bnc1(self.fc1(out_max)))
-        net = F.relu(self.bnc2(self.dropout(self.fc2(net))))
-        net = self.fc3(net) # [B,16]
+        net = F.relu(self.bnc1(self.fc1(out_max))) # 2048->256
+        net = F.relu(self.bnc2(self.dropout(self.fc2(net)))) # 256->256 * 0.3 dropou
+        net = self.fc3(net) # [B,16] # 256->cat_num 
         # segmentation network
+        #label [batch_size, 16] the 16 means what?
+        # label是一个数组[0,1,0,0,0,0..],代表是第几个类
+        # label的来源是通过utils的to_categorical实现的
         out_max = torch.cat([out_max,label],1)
-        expand = out_max.view(-1, 2048+16, 1).repeat(1, 1, n_pts)
+        # print(out_max.shape)
+        #out_max[8,2064]
+        #expand = out_max.view(-1, 2048+16, 1).repeat(1, 1, n_pts)
+        expand = out_max.view(-1, 2048+label.shape[1], 1).repeat(1, 1, n_pts)
+        #沿着列复制1024个值，代表1024个点
+        #expand[8,2064,1024]
+        # print(expand.shape)
         concat = torch.cat([expand, out1, out2, out3, out4, out5], 1)
-        net2 = F.relu(self.bns1(self.convs1(concat)))
-        net2 = F.relu(self.bns2(self.convs2(net2)))
-        net2 = F.relu(self.bns3(self.convs3(net2)))
-        net2 = self.convs4(net2)
-        net2 = net2.transpose(2, 1).contiguous()
+        # concat[8,4944,1024]
+        # 这里更激进一点，把out1,out2,out3,out4,out5都连起来了
+        # out1(8,64,1024) out2(128) out3(128) out4(512) out5(2048)
+        # 2064+64+128+128+512+2048 = 4944
+        # 2064 = (2048 + cat_num)
+        # print(concat.shape)
+        net2 = F.relu(self.bns1(self.convs1(concat))) #(4944->256)
+        net2 = F.relu(self.bns2(self.convs2(net2))) #256->256
+        net2 = F.relu(self.bns3(self.convs3(net2))) #256->128
+        net2 = self.convs4(net2) #256->partnum (8,partnum,1024)
+        net2 = net2.transpose(2, 1).contiguous() # (8,1024,partnum)
         net2 = F.log_softmax(net2.view(-1, self.part_num), dim=-1)
+        # net2.view以后，是(8192,partnum) 沿着行求log_softmax
         net2 = net2.view(batchsize, n_pts, self.part_num) # [B, N 50]
+        # 重新变形回(8,1024,partnum)
 
         return net, net2, trans_feat
 
@@ -276,8 +301,8 @@ class PointNetSeg(nn.Module):
 
 if __name__ == '__main__':
     point = torch.randn(8,3,1024)
-    label = torch.randn(8,16)
-    model = PointNetDenseCls()
+    label = torch.randn(8,1)
+    model = PointNetDenseCls(1,3)
     net, net2, trans_feat = model(point,label)
     print('net',net.shape)
     print('net2',net2.shape)

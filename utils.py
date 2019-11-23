@@ -227,3 +227,9 @@ def show_point_cloud(tuple,seg_label=[],title=None):
         ax.set_xlabel('X')
     plt.title(title)
     plt.show()
+
+if __name__ == "__main__":
+    a = torch.from_numpy(np.array([1]).astype(np.int32))
+    b = to_categorical(a,3)
+    print(b.shape)
+    print(b)
