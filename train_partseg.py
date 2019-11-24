@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--jitter', default=False, help="randomly jitter point cloud")
     parser.add_argument('--step_size', type=int, default=20, help="randomly rotate point cloud")
     parser.add_argument('--class_choice',default=None,nargs='+')
+    parser.add_argument('--dataset_path',type=str,default=None)
 
     return parser.parse_args()
 
@@ -68,9 +69,10 @@ def main(args):
     class_choice = args.class_choice
     if class_choice is None:
         class_choice = []
-    TRAIN_DATASET = PartNormalDataset(npoints=2048, split='trainval',normalize=norm, jitter=args.jitter,class_choice=class_choice)
+    root_path = args.dataset_path
+    TRAIN_DATASET = PartNormalDataset(npoints=2048, root_path = root_path,split='trainval',normalize=norm, jitter=args.jitter,class_choice=class_choice)
     dataloader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=args.batchsize,shuffle=True, num_workers=int(args.workers))
-    TEST_DATASET = PartNormalDataset(npoints=2048, split='test',normalize=norm,jitter=False,class_choice=class_choice)
+    TEST_DATASET = PartNormalDataset(npoints=2048,root_path=root_path,split='test',normalize=norm,jitter=False,class_choice=class_choice)
     testdataloader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=10,shuffle=True, num_workers=int(args.workers))
     print("The number of training data is:",len(TRAIN_DATASET))
     logger.info("The number of training data is:%d",len(TRAIN_DATASET))
