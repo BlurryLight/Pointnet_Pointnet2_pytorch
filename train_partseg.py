@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument('--step_size', type=int, default=20, help="randomly rotate point cloud")
     parser.add_argument('--class_choice',default=None,nargs='+')
     parser.add_argument('--dataset_path',type=str,default=None)
+    parser.add_argument('--label_loss_weight',type=float,default=0.7,help="a balance factor between seg_pred_loss and cls_pred_loss")
 
     return parser.parse_args()
 
@@ -116,7 +117,9 @@ def main(args):
         model = torch.nn.DataParallel(model, device_ids=device_ids)
     else:
         model.cuda()
-    criterion = PointNetLoss()
+    
+    weight = args.label_loss_weight
+    criterion = PointNetLoss(weight=weight)
     LEARNING_RATE_CLIP = 1e-5
 
     history = defaultdict(lambda: list())
