@@ -159,8 +159,8 @@ def main(args):
         forpointnet2 = args.model_name == 'pointnet2'
         test_metrics, test_hist_acc, cat_mean_iou = test_partseg(model.eval(), testdataloader, seg_label_to_cat,num_classes,num_part,forpointnet2)
 
-        print('Epoch %d %s accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f' % (
-                 epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou']))
+        print('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f  Label accuracy: %f' % (
+                 epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou'],test_metrics['label_accuracy']))
 
         logger.info('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f  Label accuracy: %f' % (
                  epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou'],test_metrics['label_accuracy']))
