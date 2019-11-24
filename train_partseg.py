@@ -6,7 +6,7 @@ import torch.utils.data
 from utils import to_categorical
 from collections import defaultdict
 from torch.autograd import Variable
-from data_utils.ShapeNetDataLoader import PartNormalDataset
+from data_utils.MyShapeNetDataLoader import PartNormalDataset
 import torch.nn.functional as F
 import datetime
 import logging
@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument('--multi_gpu', type=str, default=None, help='whether use multi gpu training')
     parser.add_argument('--jitter', default=False, help="randomly jitter point cloud")
     parser.add_argument('--step_size', type=int, default=20, help="randomly rotate point cloud")
+    parser.add_argument('--class_choice',default=None,nargs='+')
 
     return parser.parse_args()
 
@@ -64,16 +65,21 @@ def main(args):
     logger.info('PARAMETER ...')
     logger.info(args)
     norm = True if args.model_name == 'pointnet' else False
-    TRAIN_DATASET = PartNormalDataset(npoints=2048, split='trainval',normalize=norm, jitter=args.jitter)
+    class_choice = args.class_choice
+    if class_choice is None:
+        class_choice = []
+    TRAIN_DATASET = PartNormalDataset(npoints=2048, split='trainval',normalize=norm, jitter=args.jitter,class_choice=class_choice)
     dataloader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=args.batchsize,shuffle=True, num_workers=int(args.workers))
-    TEST_DATASET = PartNormalDataset(npoints=2048, split='test',normalize=norm,jitter=False)
+    TEST_DATASET = PartNormalDataset(npoints=2048, split='test',normalize=norm,jitter=False,class_choice=class_choice)
     testdataloader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=10,shuffle=True, num_workers=int(args.workers))
     print("The number of training data is:",len(TRAIN_DATASET))
     logger.info("The number of training data is:%d",len(TRAIN_DATASET))
     print("The number of test data is:", len(TEST_DATASET))
     logger.info("The number of test data is:%d", len(TEST_DATASET))
-    num_classes = 16
-    num_part = 50
+    num_classes = len(TRAIN_DATASET.cat)
+    num_part = TRAIN_DATASET.part_num_sum
+    print(num_classes)
+    print(num_part)
     blue = lambda x: '\033[94m' + x + '\033[0m'
     model = PointNet2PartSeg_msg_one_hot(num_part) if args.model_name == 'pointnet2'else PointNetDenseCls(cat_num=num_classes,part_num=num_part)
 
@@ -131,12 +137,12 @@ def main(args):
             optimizer.zero_grad()
             model = model.train()
             if args.model_name == 'pointnet':
-                labels_pred, seg_pred, trans_feat = model(points, to_categorical(label, 16))
+                labels_pred, seg_pred, trans_feat = model(points, to_categorical(label, num_classes))
                 seg_pred = seg_pred.contiguous().view(-1, num_part)
                 target = target.view(-1, 1)[:, 0]
                 loss, seg_loss, label_loss = criterion(labels_pred, label, seg_pred, target, trans_feat)
             else:
-                seg_pred = model(points, norm_plt, to_categorical(label, 16))
+                seg_pred = model(points, norm_plt, to_categorical(label, num_classes))
                 seg_pred = seg_pred.contiguous().view(-1, num_part)
                 target = target.view(-1, 1)[:, 0]
                 loss = F.nll_loss(seg_pred, target)
@@ -146,13 +152,13 @@ def main(args):
             optimizer.step()
 
         forpointnet2 = args.model_name == 'pointnet2'
-        test_metrics, test_hist_acc, cat_mean_iou = test_partseg(model.eval(), testdataloader, seg_label_to_cat,50,forpointnet2)
+        test_metrics, test_hist_acc, cat_mean_iou = test_partseg(model.eval(), testdataloader, seg_label_to_cat,num_classes,num_part,forpointnet2)
 
         print('Epoch %d %s accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f' % (
                  epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou']))
 
-        logger.info('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f' % (
-                 epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou']))
+        logger.info('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f  Label accuracy: %f' % (
+                 epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou'],test_metrics['label_accuracy']))
         if test_metrics['accuracy'] > best_acc:
             best_acc = test_metrics['accuracy']
             torch.save(model.state_dict(), '%s/%s_%.3d_%.4f.pth' % (checkpoints_dir,args.model_name, epoch, best_acc))

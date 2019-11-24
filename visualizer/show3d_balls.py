@@ -1,7 +1,10 @@
-import numpy as np
 import ctypes as ct
-import cv2
 import sys
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
 showsz = 800
 mousex, mousey = 0.5, 0.5
 zoom = 1.0
@@ -15,9 +18,9 @@ def onmouse(*args):
     mousey = y / float(showsz)
     changed = True
 
-# cv2.namedWindow('show3d')
-# cv2.moveWindow('show3d', 0, 0)
-# cv2.setMouseCallback('show3d', onmouse)
+cv2.namedWindow('show3d')
+cv2.moveWindow('show3d', 0, 0)
+cv2.setMouseCallback('show3d', onmouse)
 
 dll = np.ctypeslib.load_library('render_balls_so', '.')
 
@@ -106,7 +109,7 @@ def showpoints(xyz,c_gt=None, c_pred = None, waittime=0,
         if changed:
             render()
             changed = False
-        # cv2.imshow('show3d', show)
+        cv2.imshow('show3d', show)
         if waittime == 0:
             cmd = cv2.waitKey(10) % 256
         else:
@@ -161,4 +164,10 @@ def showpoints(xyz,c_gt=None, c_pred = None, waittime=0,
 
 if __name__ == '__main__':
     np.random.seed(100)
-    showpoints(np.random.randn(2500, 3))
+    cmap = plt.cm.get_cmap("hsv",10)
+    seg = np.random.randint(0,3,(2500,))
+    gt = np.full((2500,),1)
+    cmap = np.array([cmap(i) for i in range(10)])[:,:3]
+    pred = cmap[seg -1,:]
+    gt = cmap[gt,:]
+    showpoints(np.random.randn(2500, 3),c_gt=gt,c_pred=pred)

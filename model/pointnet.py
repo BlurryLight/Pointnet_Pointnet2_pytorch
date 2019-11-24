@@ -267,6 +267,7 @@ class PointNetLoss(torch.nn.Module):
         label_loss = F.nll_loss(labels_pred, label)
 
         loss = self.weight * seg_loss + (1-self.weight) * label_loss + mat_diff_loss * self.mat_diff_loss_scale
+        # 不考虑label loss 那你预测个***
         return loss, seg_loss, label_loss
 
 

@@ -95,13 +95,13 @@ def compute_overall_iou(pred, target, num_classes):
         shape_ious.append(np.mean(part_ious))
     return shape_ious
 
-def test_partseg(model, loader, catdict, num_classes = 50,forpointnet2=False):
+def test_partseg(model, loader, catdict,num_classes=16, num_part = 50,forpointnet2=False):
     ''' catdict = {0:Airplane, 1:Airplane, ...49:Table} '''
     iou_tabel = np.zeros((len(catdict),3))
     iou_list = []
     metrics = defaultdict(lambda:list())
     hist_acc = []
-    # mean_correct = []
+    mean_correct = []
     for batch_id, (points, label, target, norm_plt) in tqdm(enumerate(loader), total=len(loader), smoothing=0.9):
         batchsize, num_point,_= points.size()
         points, label, target, norm_plt = Variable(points.float()),Variable(label.long()), Variable(target.long()),Variable(norm_plt.float())
@@ -109,17 +109,17 @@ def test_partseg(model, loader, catdict, num_classes = 50,forpointnet2=False):
         norm_plt = norm_plt.transpose(2, 1)
         points, label, target, norm_plt = points.cuda(), label.squeeze().cuda(), target.cuda(), norm_plt.cuda()
         if forpointnet2:
-            seg_pred = model(points, norm_plt, to_categorical(label, 16))
+            seg_pred = model(points, norm_plt, to_categorical(label, num_classes))
         else:
-            labels_pred, seg_pred, _  = model(points,to_categorical(label,16))
-            # labels_pred_choice = labels_pred.data.max(1)[1]
-            # labels_correct = labels_pred_choice.eq(label.long().data).cpu().sum()
-            # mean_correct.append(labels_correct.item() / float(points.size()[0]))
+            labels_pred, seg_pred, _  = model(points,to_categorical(label,num_classes))
+            labels_pred_choice = labels_pred.data.max(1)[1]
+            labels_correct = labels_pred_choice.eq(label.long().data).cpu().sum()
+            mean_correct.append(labels_correct.item() / float(points.size()[0]))
         # print(pred.size())
         iou_tabel, iou = compute_cat_iou(seg_pred,target,iou_tabel)
         iou_list+=iou
         # shape_ious += compute_overall_iou(pred, target, num_classes)
-        seg_pred = seg_pred.contiguous().view(-1, num_classes)
+        seg_pred = seg_pred.contiguous().view(-1, num_part)
         target = target.view(-1, 1)[:, 0]
         pred_choice = seg_pred.data.max(1)[1]
         correct = pred_choice.eq(target.data).cpu().sum()
@@ -128,7 +128,7 @@ def test_partseg(model, loader, catdict, num_classes = 50,forpointnet2=False):
     hist_acc += metrics['accuracy']
     metrics['accuracy'] = np.mean(hist_acc)
     metrics['inctance_avg_iou'] = np.mean(iou_list)
-    # metrics['label_accuracy'] = np.mean(mean_correct)
+    metrics['label_accuracy'] = np.mean(mean_correct)
     iou_tabel = pd.DataFrame(iou_tabel,columns=['iou','count','mean_iou'])
     iou_tabel['Category_IOU'] = [catdict[i] for i in range(len(catdict)) ]
     cat_iou = iou_tabel.groupby('Category_IOU')['mean_iou'].mean()
@@ -229,7 +229,7 @@ def show_point_cloud(tuple,seg_label=[],title=None):
     plt.show()
 
 if __name__ == "__main__":
-    a = torch.from_numpy(np.array([1]).astype(np.int32))
-    b = to_categorical(a,3)
+    a = torch.from_numpy(np.array([5]).astype(np.int32))
+    b = to_categorical(a,16)
     print(b.shape)
     print(b)

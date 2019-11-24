@@ -19,6 +19,7 @@ def pc_normalize(pc):
 def square_distance(src, dst):
     """
     Calculate Euclid distance between each two points.
+   
 
     src^T * dst = xn * xm + yn * ym + zn * zm；
     sum(src^2, dim=-1) = xn*xn + yn*yn + zn*zn;
@@ -67,21 +68,40 @@ def farthest_point_sample(xyz, npoint):
         npoint: number of samples
     Return:
         centroids: sampled pointcloud index, [B, npoint]
+        随机选取一个点作为farthest,然后在每个batch里面的矩阵里，选离当前点最大距离的farthest点，加入到centroids
     """
     device = xyz.device
     B, N, C = xyz.shape
     centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
     distance = torch.ones(B, N).to(device) * 1e10
-    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
+    # print("distance",distance)
+    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)#随机挑选一个点作为farthest
+    # print("farthest",farthest)
     batch_indices = torch.arange(B, dtype=torch.long).to(device)
+    # print("batch_indices",batch_indices)
     for i in range(npoint):
         centroids[:, i] = farthest
+        print('centro',centroids)
         centroid = xyz[batch_indices, farthest, :].view(B, 1, 3)
         dist = torch.sum((xyz - centroid) ** 2, -1)
         mask = dist < distance
+        #mask = tensor(T,F,T,F)
         distance[mask] = dist[mask]
+        # print("distance",distance)
+        #mask是一串掩码，只更新比当前distance矩阵小的值
+        #注意，每次的distance计算完后，当前的点的distance都是0000
+        #由于distance非负，下次更新distance矩阵的时候，已经被选中过的点的distance value不会被更新，所以也不会被重复选中
+        #很精妙
         farthest = torch.max(distance, -1)[1]
     return centroids
+# if __name__ == '__main__':
+#     array = np.linspace(1,12,24).astype(np.float32)
+#     points = torch.from_numpy(array)
+#     points = points.view(-1,4,3)
+#     print(points.shape)
+#     print(points)
+#     res = farthest_point_sample(points,3)
+#     print(res)
 
 
 def query_ball_point(radius, nsample, xyz, new_xyz):
@@ -123,9 +143,10 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
     S = npoint
     fps_idx = farthest_point_sample(xyz, npoint) # [B, npoint, C]
     new_xyz = index_points(xyz, fps_idx)
+    # new_xyz = [B,npoint,C]
     idx = query_ball_point(radius, nsample, xyz, new_xyz)
-    grouped_xyz = index_points(xyz, idx) # [B, npoint, nsample, C]
-    grouped_xyz_norm = grouped_xyz - new_xyz.view(B, S, 1, C)
+    grouped_xyz = index_points(xyz, idx) # [B, npoint, nsample, C] 原文的N' * k * (c), 这里的c是坐标？ 原文的c是特征
+    grouped_xyz_norm = grouped_xyz - new_xyz.view(B, S, 1, C) #归一化
     if points is not None:
         grouped_points = index_points(points, idx)
         new_points = torch.cat([grouped_xyz_norm, grouped_points], dim=-1) # [B, npoint, nsample, C+D]
@@ -157,7 +178,7 @@ def sample_and_group_all(xyz, points):
     return new_xyz, new_points
 
 
-class PointNetSetAbstraction(nn.Module):
+class PointNetSetAbstraction(nn.Module): #shapenet seg
     def __init__(self, npoint, radius, nsample, in_channel, mlp, group_all):
         super(PointNetSetAbstraction, self).__init__()
         self.npoint = npoint
@@ -201,7 +222,7 @@ class PointNetSetAbstraction(nn.Module):
         return new_xyz, new_points
 
 
-class PointNetSetAbstractionMsg(nn.Module):
+class PointNetSetAbstractionMsg(nn.Module): #mobilenet seg
     def __init__(self, npoint, radius_list, nsample_list, in_channel, mlp_list):
         super(PointNetSetAbstractionMsg, self).__init__()
         self.npoint = npoint

@@ -93,7 +93,7 @@ class PointNet2PartSeg(nn.Module): #TODO part segmentation tasks
         return x, feat
 
 class PointNet2PartSeg_msg_one_hot(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes): #num_classes 是 part数
         super(PointNet2PartSeg_msg_one_hot, self).__init__()
         self.sa1 = PointNetSetAbstractionMsg(512, [0.1, 0.2, 0.4], [32, 64, 128], 0+3, [[32, 32, 64], [64, 64, 128], [64, 96, 128]])
         self.sa2 = PointNetSetAbstractionMsg(128, [0.4,0.8], [64, 128], 128+128+64, [[128, 128, 256], [128, 196, 256]])
