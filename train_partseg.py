@@ -146,6 +146,8 @@ def main(args):
                 seg_pred = seg_pred.contiguous().view(-1, num_part)
                 target = target.view(-1, 1)[:, 0]
                 loss, seg_loss, label_loss = criterion(labels_pred, label, seg_pred, target, trans_feat)
+                history['seg_loss'].append(seg_loss.cpu().data.numpy())
+                history['label_loss'].append(label_loss.cpu().data.numpy())
             else:
                 seg_pred = model(points, norm_plt, to_categorical(label, num_classes))
                 seg_pred = seg_pred.contiguous().view(-1, num_part)
@@ -161,6 +163,9 @@ def main(args):
 
         print('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f  Label accuracy: %f' % (
                  epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou'],test_metrics['label_accuracy']))
+        if(args.model_name == 'pointnet'):
+            print('loss:%f,seg_loss:%f,label_loss:%f'%(history['loss'][-1],history['seg_loss'][-1],history['label_loss'][-1]))
+            logger.info('loss:%f,seg_loss:%f,label_loss:%f'%(history['loss'][-1],history['seg_loss'][-1],history['label_loss'][-1]))
 
         logger.info('Epoch %d %s Accuracy: %f  Class avg mIOU: %f   Inctance avg mIOU: %f  Label accuracy: %f' % (
                  epoch, blue('test'), test_metrics['accuracy'],test_metrics['class_avg_iou'],test_metrics['inctance_avg_iou'],test_metrics['label_accuracy']))

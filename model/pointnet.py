@@ -262,12 +262,15 @@ class PointNetLoss(torch.nn.Module):
         self.weight = weight
 
     def forward(self, labels_pred, label, seg_pred,seg, trans_feat):
+        # print("label pred",labels_pred,"label labeld",label)
         seg_loss = F.nll_loss(seg_pred, seg)
         mat_diff_loss = feature_transform_reguliarzer(trans_feat)
-        label_loss = F.nll_loss(labels_pred, label)
+        # label_loss = F.nll_loss(labels_pred, label)
+        label_loss = F.cross_entropy(labels_pred, label)
 
         loss = self.weight * seg_loss + (1-self.weight) * label_loss + mat_diff_loss * self.mat_diff_loss_scale
         # 不考虑label loss 那你预测个***
+        # print("total loss",loss,"seg loss",seg_loss,"label loss",label_loss)
         return loss, seg_loss, label_loss
 
 
