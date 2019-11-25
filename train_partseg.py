@@ -83,6 +83,7 @@ def main(args):
     num_part = TRAIN_DATASET.part_num_sum
     if class_choice is not None:
         seg_classes = TRAIN_DATASET.seg_classes
+        seg_label_to_cat = {}
         for cat in seg_classes.keys():
             for label in seg_classes[cat]:
                 seg_label_to_cat[label] = cat

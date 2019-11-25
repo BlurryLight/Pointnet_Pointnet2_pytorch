@@ -81,7 +81,13 @@ print(cls_pred.max(0)[1])
 print(cls_pred.max(1)[1])
 pred_choice = seg_pred.data.max(1)[1]
 print(max(pred_choice),min(pred_choice))
+correct = pred_choice.eq(seg.data).cpu().sum()
+print("coreect",correct)
+print("acc",correct.item()/2500)
 print(pred_choice.shape)
-pred_color = cmap[pred_choice.cpu().numpy(),:]
+dif = (pred_choice == seg).cpu().numpy().astype(int)
+print(dif)
+dif_color = cmap[dif,:]
+# pred_color = cmap[pred_choice.cpu().numpy(),:]
 
-showpoints(point_np,pred_color)
+showpoints(point_np,dif_color)
