@@ -81,6 +81,13 @@ def main(args):
     logger.info("The number of test data is:%d", len(TEST_DATASET))
     num_classes = len(TRAIN_DATASET.cat)
     num_part = TRAIN_DATASET.part_num_sum
+    if class_choice is not None:
+        seg_classes = TRAIN_DATASET.seg_classes
+        for cat in seg_classes.keys():
+            for label in seg_classes[cat]:
+                seg_label_to_cat[label] = cat
+        
+
     print(num_classes)
     print(num_part)
     blue = lambda x: '\033[94m' + x + '\033[0m'
